@@ -36,6 +36,11 @@ def main(root=Path('/')):
     # Persist the claim before enabling daemon: failure/power loss requires owner review.
     with state.open('x') as f:
         f.write('attempting\n'); f.flush(); os.fsync(f.fileno())
+    directory = os.open(state.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
     outcome = 'failed-owner-review-required'
     try:
         if run(['systemctl', 'enable', '--now', 'tailscaled'], 30):
