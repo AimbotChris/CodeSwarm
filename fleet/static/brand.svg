@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" role="img" aria-label="Code Swarm OS bee">
+ <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M65 48 20 88 65 128M175 48 220 88 175 128" stroke="#f4a20b" stroke-width="26"/>
+  <path d="M105 38c-1-12-12-20-23-30m53 30c1-12 12-20 23-30" stroke="#252c38" stroke-width="10"/>
+ </g>
+ <path d="M80 91c4-25 18-39 40-39s36 14 40 39Z" fill="#252c38"/>
+ <path d="M77 103h86v21H77Z" fill="#f4a20b"/>
+ <path d="M81 136h78c-3 11-7 17-13 22H94c-6-5-10-11-13-22Zm21 33h36l-12 19q-6 8-12 0Z" fill="#252c38"/>
+</svg>

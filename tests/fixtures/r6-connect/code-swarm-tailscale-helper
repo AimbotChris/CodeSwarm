@@ -1,0 +1,62 @@
+#!/usr/bin/python3 -I
+"""Narrow owner-approved initial connection. No keys, operator grants or public routes."""
+import fcntl,json,os,selectors,subprocess,sys,time,urllib.parse
+
+def emit(state, message, **extra):
+ print(json.dumps(dict(state=state,message=message,**extra)),flush=True)
+def safe_url(value):
+ try:
+  u=urllib.parse.urlsplit(value)
+  return bool(u.scheme=='https' and u.hostname=='login.tailscale.com' and not u.port and not u.username and not u.password and not u.fragment and not u.query and u.path.startswith('/a/') and len(value)<2048)
+ except ValueError:return False
+def status():
+ p=subprocess.run(['/usr/bin/tailscale','status','--json'],capture_output=True,text=True,timeout=4)
+ try:return json.loads(p.stdout)
+ except (ValueError,TypeError):return {}
+def main():
+ if os.geteuid()!=0 or len(sys.argv)!=1:raise SystemExit('Authorized local helper only')
+ lock=open('/run/code-swarm-connect.lock','w');os.chmod('/run/code-swarm-connect.lock',0o600)
+ try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+ except BlockingIOError:emit('failed','Another setup attempt is running. Close it before retrying.');return
+ cancel=selectors.DefaultSelector();cancel.register(sys.stdin,selectors.EVENT_READ)
+ if cancel.select(timeout=0):
+  cancel.close();emit('cancelled','Setup was canceled before service changes.');return
+ cancel.close()
+ emit('starting','Starting the Tailscale service you approved…')
+ try:subprocess.run(['/usr/bin/systemctl','enable','--now','tailscaled'],check=True,capture_output=True,timeout=20)
+ except subprocess.SubprocessError:emit('failed','The Tailscale service could not start. Check network access and retry.');return
+ data=status();state=data.get('BackendState')
+ if state=='Running':emit('connected','Tailscale reports this computer connected.');return
+ if state=='NeedsMachineAuth':emit('approval','Your tailnet administrator must approve this computer.');return
+ if state not in ('NeedsLogin','NoState') or data.get('CurrentTailnet'):
+  emit('failed','Existing or unavailable Tailscale settings need owner review. This setup did not change them.');return
+ # Initial setup only: ordinary Tailscale VPN/DNS defaults, disclosed in the UI.
+ emit('connecting','Tailscale is running. Requesting its sign-in page… Check your internet connection if Firefox does not open.')
+ child=subprocess.Popen(['/usr/bin/tailscale','up','--timeout=120s'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+ watch=selectors.DefaultSelector();watch.register(sys.stdin,selectors.EVENT_READ)
+ deadline=time.monotonic()+125;last_url=None
+ try:
+  while time.monotonic()<deadline:
+   if watch.select(timeout=.5):
+    # Cancel command or a closed GUI pipe: never keep a hidden attempt running.
+    os.read(sys.stdin.fileno(),4096)
+    emit('cancelled','Setup stopped waiting. The approved service remains enabled. A sign-in completed in Firefox may still connect this computer.');return
+   data=status();state=data.get('BackendState')
+   if state=='Running':emit('connected','Tailscale reports this computer connected.');return
+   if state=='NeedsMachineAuth':emit('approval','Sign-in was received. Your tailnet administrator must approve this computer.');return
+   url=data.get('AuthURL','')
+   if url and url!=last_url:
+    if not safe_url(url):emit('failed','An unexpected sign-in address was refused. Ask the owner to check Tailscale settings.');return
+    last_url=url;emit('signin','Finish sign-in in Firefox, then return here.',url=url)
+   if child.poll() is not None:
+    emit('failed','Connection did not finish. Check your internet connection and retry. The approved service remains enabled.');return
+  emit('timeout','Sign-in timed out. You can retry. The approved service remains enabled; this does not revoke a browser sign-in.')
+ finally:
+  if child.poll() is None:
+   child.terminate()
+   try:child.wait(timeout=3)
+   except subprocess.TimeoutExpired:child.kill();child.wait(timeout=3)
+  watch.close()
+if __name__=='__main__':
+ try:main()
+ except (OSError,subprocess.SubprocessError):emit('failed','Setup could not finish. Check local service/network availability and retry.')

@@ -1,0 +1,35 @@
+#!/usr/bin/python3
+"""Opt-in, loopback-only worker telemetry; no tokens, usernames, task content or commands."""
+import http.server,json,os,pathlib,shutil,subprocess,time
+
+def command(args):
+    try: return subprocess.check_output(args,text=True,stderr=subprocess.DEVNULL,timeout=2).strip()
+    except (OSError,subprocess.SubprocessError): return ''
+
+def snapshot():
+    props=command(['systemctl','--user','show','codex-desktop','-p','ActiveState','-p','MainPID'])
+    values=dict(line.split('=',1) for line in props.splitlines() if '=' in line)
+    pid=values.get('MainPID','0')
+    try: app='running' if pathlib.Path('/proc',pid,'comm').read_text().strip()=='ChatGPT' else 'starting'
+    except OSError: app='unknown' if not values else 'failed' if values.get('ActiveState')=='failed' else 'stopped'
+    desktop=bool(os.environ.get('DISPLAY')) and bool(command(['xdpyinfo']))
+    memory={line.split(':')[0]:int(line.split()[1]) for line in pathlib.Path('/proc/meminfo').read_text().splitlines()}
+    disk=shutil.disk_usage(pathlib.Path.home())
+    return dict(schema=1,observed_at=time.time(),desktop='active' if desktop else 'inactive',app=app,
+        same_session_vnc=command(['systemctl','--user','is-active','code-swarm-vnc'])=='active',
+        work='unknown',authentication='unknown',updates='approval required; installation disabled',
+        resources=dict(memory_available_mib=round(memory['MemAvailable']/1024),memory_total_mib=round(memory['MemTotal']/1024),
+        disk_free_gib=round(disk.free/2**30,2),disk_total_gib=round(disk.total/2**30,2),
+        uptime_seconds=int(float(pathlib.Path('/proc/uptime').read_text().split()[0]))))
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self,*args): pass
+    def do_GET(self):
+        if self.path!='/status': self.send_error(404);return
+        body=json.dumps(snapshot()).encode()
+        self.send_response(200);self.send_header('Content-Type','application/json');self.send_header('Cache-Control','no-store')
+        self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+
+if __name__=='__main__':
+    if not pathlib.Path('/etc/codex-remote/enabled').exists(): raise SystemExit('Remote access has not been approved on this worker.')
+    http.server.HTTPServer(('127.0.0.1',9072),Handler).serve_forever()

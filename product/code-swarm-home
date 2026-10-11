@@ -1,0 +1,78 @@
+#!/usr/bin/python3
+"""Visible local recovery UI; never claims enrollment, approval or job idleness."""
+import tkinter as tk
+from tkinter import ttk
+import subprocess,os,pathlib,threading,shutil
+root=tk.Tk();root.title('Code Swarm OS — Home and recovery');root.geometry('760x680+30+30')
+root.configure(bg='#14252b');root.option_add('*Font',('DejaVu Sans',11))
+frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
+brandrow=ttk.Frame(frame);brandrow.pack(anchor='w')
+try:
+ logo=tk.PhotoImage(file='/usr/share/code-swarm/brand/code-swarm-mark.png')
+ ttk.Label(brandrow,image=logo).pack(side='left',padx=(0,12))
+ root.iconphoto(True,logo)
+except tk.TclError: pass
+ttk.Label(brandrow,text='Code Swarm',font=('DejaVu Sans',24,'bold')).pack(side='left')
+ttk.Label(brandrow,text=' OS',foreground='#9b6500',font=('DejaVu Sans',14,'bold')).pack(side='left')
+ttk.Label(frame,text='Your Codex worker • Powered by Debian 13',padding=(0,8)).pack(anchor='w')
+status=tk.StringVar(value='Starting ChatGPT. A keyring prompt may need your attention.')
+ttk.Label(frame,textvariable=status,wraplength=680,padding=(0,16)).pack(anchor='w')
+def launch(args): subprocess.Popen(args,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+def start():
+ subprocess.run(['systemctl','--user','reset-failed','codex-desktop'],capture_output=True)
+ launch(['systemctl','--user','start','codex-desktop'])
+row=ttk.Frame(frame);row.pack(fill='x',pady=5)
+for text,fn in [('Start ChatGPT',start),('Open browser',lambda:launch(['firefox-esr'])),('Recovery terminal',lambda:launch(['xterm']))]:
+ ttk.Button(row,text=text,command=fn).pack(side='left',padx=(0,8))
+def details():launch(['xterm','-T','Code Swarm OS — diagnostics','-e','sh','-c','journalctl --user -u codex-desktop -n 60 --no-pager; printf "\\nPress Enter to close."; read answer'])
+row=ttk.Frame(frame);row.pack(fill='x',pady=10)
+for text,fn in [('Show startup log',details),('Stop ChatGPT',lambda:launch(['systemctl','--user','stop','codex-desktop'])),('Log out',lambda:launch(['openbox','--exit']))]:
+ ttk.Button(row,text=text,command=fn).pack(side='left',padx=(0,8))
+ttk.Separator(frame).pack(fill='x',pady=12)
+ttk.Label(frame,text='Updates and remote access',font=('DejaVu Sans',14,'bold')).pack(anchor='w')
+access=tk.StringVar(value='Checking local configuration…')
+ttk.Label(frame,textvariable=access,wraplength=680,padding=(0,12)).pack(anchor='w')
+def fleet():
+ launch(['systemctl','--user','start','code-swarm-fleet'])
+ root.after(1200,lambda:launch(['firefox-esr','http://127.0.0.1:8765']))
+ttk.Button(frame,text='Connect Tailscale',command=lambda:launch(['/usr/local/bin/code-swarm-connect'])).pack(anchor='w',pady=4)
+ttk.Button(frame,text='Open Workers management',command=fleet).pack(anchor='w',pady=4)
+def remote_guide():
+ window=tk.Toplevel(root);window.title('Code Swarm OS — remote access setup');window.geometry('760x580')
+ text=tk.Text(window,wrap='word',padx=18,pady=18,font=('DejaVu Sans',11))
+ scroll=ttk.Scrollbar(window,command=text.yview);scroll.pack(side='right',fill='y');text.configure(yscrollcommand=scroll.set);text.pack(fill='both',expand=True)
+ try:text.insert('1.0',pathlib.Path('/usr/share/code-swarm/REMOTE-ACCESS.md').read_text())
+ except OSError:text.insert('1.0','Setup guide unavailable. Remote services remain disabled.')
+ text.configure(state='disabled');text.focus_set();window.bind('<Escape>',lambda e:window.destroy())
+ttk.Button(frame,text='Remote access setup guide',command=remote_guide).pack(anchor='w',pady=4)
+ttk.Button(frame,text='Software inventory and update coverage',command=lambda:launch(['xterm','-T','Code Swarm OS — update coverage','-e','sh','-c','code-swarm-inventory; printf "\\nPress Enter to close."; read answer'])).pack(anchor='w')
+ttk.Label(frame,text='If startup stalls: check the keyring prompt, view the log, or use Recovery terminal.\nSigning in to ChatGPT is separate from your local computer login.',wraplength=680,padding=(0,16)).pack(anchor='w')
+def refresh():
+ try:
+  disk=shutil.disk_usage(pathlib.Path.home())
+  try:
+   remote='Remote access approved locally; see Workers for verified status.' if pathlib.Path('/etc/codex-remote/enabled').exists() else 'Remote access is off. Open the setup guide to configure it.'
+  except PermissionError:remote='Remote status is protected. Open the setup guide; Workers verifies configured access.'
+  access.set('Updates: installation disabled; assistant enrollment requires separate setup.\n'+remote+'\nDisk free: %.1f GiB%s. App recovery detects crashes, not hangs or idle jobs.'%(disk.free/2**30,' — LOW SPACE' if disk.free<5*2**30 else ''))
+  s=subprocess.check_output(['systemctl','--user','show','codex-desktop','-p','ActiveState','-p','SubState','-p','NRestarts','-p','MainPID'],text=True,timeout=2)
+  vals=dict(l.split('=',1) for l in s.splitlines() if '=' in l)
+  phase='ChatGPT is stopped. Choose Start ChatGPT to launch it.'
+  phasefile=pathlib.Path.home()/'.local/state/code-swarm/launch-status'
+  if phasefile.exists():phase=phasefile.read_text().strip()
+  pid=vals.get('MainPID','0')
+  try:
+   if pathlib.Path('/proc/'+pid+'/comm').read_text().strip()=='ChatGPT':phase='ChatGPT is running.'
+  except OSError:pass
+  status.set(phase+'\nService: '+vals.get('ActiveState','unknown')+' · crash restarts: '+vals.get('NRestarts','?'))
+ except Exception:status.set('Session service unavailable. Open Recovery terminal or the startup log.')
+ root.after(5000,refresh)
+def mapped(event):
+ if event.widget is root and root.winfo_viewable():
+  ready=os.environ.get('CODE_SWARM_HOME_READY')
+  if ready:
+   try:
+    fd=os.open(ready,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600);os.write(fd,b'Home mapped\n');os.close(fd)
+   except FileExistsError:pass
+root.bind('<Map>',mapped)
+root.after(1500,refresh)
+root.mainloop()

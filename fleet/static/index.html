@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Workers · Code Swarm OS</title><link rel="stylesheet" href="/style.css"><script defer src="/state.js"></script><script defer src="/app.js"></script></head>
+<body><a class="skip" href="#workers">Skip to workers</a><main>
+<header><div><div class="brand"><img src="/brand.svg" width="54" height="45" alt=""><span>Code Swarm <small>OS</small></span></div><h1>Your workers</h1><p>Small computers. Useful work. A clear view of each machine.</p></div><button id="refresh">Refresh status</button></header>
+<section class="summary" aria-label="Fleet overview"><div><strong id="total">—</strong><span>tailnet devices</span></div><div><strong id="online">—</strong><span>connected to Tailscale</span></div><div><strong id="ready">—</strong><span>desktop links verified</span></div></section>
+<div class="controls"><label for="filter">Find a device<input type="search" id="filter" placeholder="Name, hostname or system"></label><p id="status" role="status" aria-live="polite">Reading local Tailscale status…</p></div>
+<p id="error" class="error" role="alert" hidden></p>
+<section id="workers" class="cards" aria-label="Workers" aria-busy="true"></section>
+<section id="empty" class="empty" hidden><h2>No devices to show</h2><p id="empty-detail">Connect this computer to your tailnet, then refresh.</p></section>
+<details id="troubleshooting" hidden><summary>Troubleshooting details</summary><pre id="technical-detail"></pre></details>
+<details><summary>Connect a worker and understand its status</summary><p>Enroll each worker locally with its owner’s approval. Follow the included remote-access guide, then add its exact Tailscale HTTPS desktop and status addresses to the controller’s <code>workers.json</code>. No API key is needed. Unconfigured tailnet devices remain visible with unknown desktop status.</p><p><b>Transport</b> comes from Tailscale. <b>Desktop</b> means an active graphical session. <b>App</b> reports the desktop process, not account sign-in. <b>Work</b> remains unknown because the official app has no verified global job-status integration. An unavailable or old report never becomes “idle.”</p><p>Desktop links share the worker’s existing Xorg session. You still authenticate. A monitor or supported display adapter may be needed on physical machines; no virtual display is created.</p></details>
+<footer>Local, read-only management · Updates require review · No remote commands or credentials stored</footer>
+</main></body></html>

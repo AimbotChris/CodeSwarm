@@ -1,0 +1,42 @@
+#!/usr/bin/python3
+"""Root-only proposal staging. Does not upgrade, reboot, enroll or grant permits."""
+import runpy
+import apt, fcntl, hashlib, json, os, pathlib, subprocess, tempfile, time
+base=pathlib.Path('/var/lib/codex-control')
+if os.geteuid()!=0: raise SystemExit('root control principal required')
+base.mkdir(mode=0o700,parents=True,exist_ok=True)
+if base.stat().st_uid!=0 or base.stat().st_mode & 0o077: raise SystemExit('unsafe control directory')
+with open(base/'lock','a') as lock:
+ fcntl.flock(lock,fcntl.LOCK_EX)
+ subprocess.run(['apt-get','update'],check=True)
+ cache=apt.Cache();cache.upgrade(dist_upgrade=True)
+ changes=cache.get_changes()
+ coverage=runpy.run_path('/usr/local/bin/code-swarm-inventory')
+ inventory=coverage['inventory']()
+ held={p['name'] for p in inventory['apt'] if p['held']}
+ excluded=[]
+ packages=[]
+ for p in changes:
+  c=p.candidate
+  if p.name in held or not coverage["covered"](p.name,c):
+   excluded.append(p.name);continue
+  if p.marked_delete:
+   packages.append({'name':p.name,'action':'remove','installed':p.installed.version});continue
+  if not c or not c.sha256 or not c.origins or not all(o.trusted for o in c.origins):
+   raise SystemExit('untrusted or unhashed candidate: '+p.name)
+  packages.append({'name':p.name,'version':c.version,'architecture':c.architecture,'sha256':c.sha256,'size':c.size})
+ device=pathlib.Path('/etc/machine-id').read_text().strip()
+ manifest={'schema':1,'device':device,'created':int(time.time()),'packages':sorted(packages,key=lambda p:p['name']),
+           'inventory':inventory,'excluded_candidates':excluded,'lifecycle':'unverified','apply_enabled':False,'state':'pending-review'}
+ key=base/'proposal-key.pem'
+ if not key.exists():
+  subprocess.run(['openssl','genpkey','-algorithm','ED25519','-out',str(key)],check=True)
+  key.chmod(0o600)
+  subprocess.run(['openssl','pkey','-in',str(key),'-pubout','-out',str(base/'proposal-public.pem')],check=True)
+ raw=json.dumps(manifest,sort_keys=True,separators=(',',':')).encode()
+ digest=hashlib.sha256(raw).hexdigest()
+ proposal=base/'proposals'/digest;proposal.mkdir(parents=True,exist_ok=True,mode=0o700)
+ (proposal/'manifest.json').write_bytes(raw)
+ subprocess.run(['openssl','pkeyutl','-sign','-rawin','-inkey',str(key),'-in',str(proposal/'manifest.json'),'-out',str(proposal/'manifest.sig')],check=True)
+ tmp=base/'pending.tmp';tmp.write_text(digest+'\n');os.replace(tmp,base/'pending')
+ print('Proposal staged:',digest,'; application is disabled')

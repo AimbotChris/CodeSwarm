@@ -1,0 +1,24 @@
+# Never commit artifacts, build state or credentials.
+__pycache__/
+*.pyc
+.DS_Store
+.env*
+*.iso
+*.img
+*.qcow2
+*.raw
+*.deb
+*.tar*
+*.key
+*.pem
+*.log
+/build/
+/vendor/
+/output/
+/private/
+/qa/
+/cache/
+/evidence/
+tailscaled.state
+auth.json
+authkey

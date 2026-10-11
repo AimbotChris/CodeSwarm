@@ -1,0 +1,14 @@
+# Physical worker qualification
+
+Primary target: an upcycled amd64 thin client or mini PC, on continuously for useful coding work. All tests so far used disposable VMs. Qualify each physical model before calling it ready for unattended service.
+
+- Confirm 64-bit CPU, RAM and actual usable storage, disk model/serial, storage health and replaceability. Boot the USB nondestructively first; verify NIC, Wi-Fi if needed, keyboard, display, graphics and suspend behavior. Firmware availability varies despite bundled non-free firmware support.
+- Check both attached-monitor and no-monitor cold boot. Some firmware requires EDID or a display adapter; Xorg/VNC cannot create a missing physical display. Secure Boot, legacy/UEFI compatibility and unusual storage controllers remain unverified.
+- Choose the explicit access model in product/REMOTE-ACCESS.md. In authenticated-greeter mode, verify tailnet reconnect, remote login-screen access, OS password, encrypted-keyring unlock and app launch after a clean cold reboot. Session mode needs local login. Fully unattended credential unlock is not implemented. The image contains no account sessions, Tailscale identity or machine-id clone.
+- Test network loss/recovery with an actual useful task; distinguish Tailscale transport, stale telemetry, graphical session, app process, authentication and task state. Never infer job idleness from CPU use. Real Codex task continuation after outage has not been tested.
+- Measure temperatures, wall power and storage writes at idle and while working. Assess firmware power-restore and sleep settings with the owner; no host firmware or power settings were changed by this project. VM results are not watt estimates.
+- Keep storage headroom for projects and browser/build/package caches. Journals are capped at128MiB persistent/32MiB runtime, keep512MiB free, retain up to7days and rate-limit bursts. Session diagnostics now use the capped journal. These controls do not bound every application's files, all caches or flash wear. Home and Workers show free disk space; below5GiB is flagged.
+- Keep a tested external backup and recovery USB. The recovery menu is not rollback. A/B partitions and a hardware watchdog need actual storage/hardware measurements and a tested recovery design; neither is enabled. Process supervision handles crashes with bounded restarts, not hangs. No automatic firmware updates, package installation or reboot occurs.
+- Before 24/7 unattended use, test repeated login/logout, a controlled app crash, a clean reboot, slow/unavailable network and realistic concurrent repository tasks. Stop and inspect if restart limits are hit. Do not manufacture idleness by killing work.
+
+No real disk was flashed, wiped or installed during these tests. Physical installation and persistent access enrollment are separate owner actions.

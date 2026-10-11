@@ -1,0 +1,14 @@
+#!/bin/sh
+# Secret Service owns keyring startup; LightDM does not also initialize it.
+set -eu
+umask 077
+state="$HOME/.local/state/code-swarm"
+mkdir -p "$state"
+printf "%s\n" "Waiting for keyring setup or unlock" > "$state/launch-status"
+if ! printf '%s' 'non-secret readiness marker' | timeout 120 secret-tool store --label='Code Swarm OS keyring readiness' application codex-prototype purpose startup-readiness; then
+ printf '%s\n' 'Keyring was cancelled, failed, or timed out. Choose Start ChatGPT to retry.' > "$state/launch-status"
+ cat "$state/launch-status" >&2
+ exit 0
+fi
+printf "%s\n" "Starting ChatGPT" > "$state/launch-status"
+exec /usr/bin/chatgpt --ozone-platform=x11

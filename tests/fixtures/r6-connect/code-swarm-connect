@@ -1,0 +1,86 @@
+#!/usr/bin/python3
+"""Owner-controlled Tailscale setup; secrets are entered only in system/browser UI."""
+import json,pathlib,queue,subprocess,threading,tkinter as tk,urllib.parse
+from tkinter import ttk
+
+def safe_url(value):
+ try:
+  u=urllib.parse.urlsplit(value)
+  return bool(u.scheme=='https' and u.hostname=='login.tailscale.com' and not u.port and not u.username and not u.password and not u.fragment and not u.query and u.path.startswith('/a/') and len(value)<2048)
+ except ValueError:return False
+class Setup:
+ def __init__(self,root):
+  self.root=root;self.process=None;self.events=queue.Queue();self.url=None;self.closing=False;self.running=False;self.connected=False;self.started=False;self.attempt=0
+  root.title('Connect Tailscale — Code Swarm OS');root.geometry('660x520');root.configure(bg='#14252b')
+  frame=ttk.Frame(root,padding=28);frame.pack(fill='both',expand=True)
+  ttk.Label(frame,text='Connect your worker',font=('DejaVu Sans',22,'bold')).pack(anchor='w')
+  ttk.Label(frame,text='Tailscale connects this computer to your private network.',wraplength=600,padding=(0,12)).pack(anchor='w')
+  ttk.Label(frame,text='With your approval, setup will enable Tailscale at startup and begin its standard VPN connection, including Tailscale DNS and firewall integration. It will open official sign-in in Firefox. You choose the account and approve enrollment there.\n\nExisting connections are checked first. This does not enable remote desktop, Tailscale SSH, an exit node, public sharing or assistant access.',wraplength=590,padding=(0,8)).pack(anchor='w')
+  self.message=tk.StringVar(value='Checking this computer…');ttk.Label(frame,textvariable=self.message,wraplength=590,padding=(0,18)).pack(anchor='w')
+  self.approve=ttk.Button(frame,text='Approve and connect',command=self.start);self.approve.pack(anchor='w',pady=4)
+  self.browser=ttk.Button(frame,text='Open sign-in in Firefox',command=self.open_browser,state='disabled');self.browser.pack(anchor='w',pady=4)
+  self.cancel_button=ttk.Button(frame,text='Close',command=self.cancel);self.cancel_button.pack(anchor='w',pady=4)
+  ttk.Label(frame,text='Your local login password is requested by the system. This window never reads or stores it.',wraplength=580,padding=(0,16)).pack(anchor='w')
+  root.protocol('WM_DELETE_WINDOW',self.cancel);root.after(100,self.drain);self.check()
+ def check(self):
+  def work():
+   try:
+    r=subprocess.run(['/usr/bin/tailscale','status','--json'],capture_output=True,text=True,timeout=4);s=json.loads(r.stdout).get('BackendState')
+    self.events.put({'state':'connected' if s=='Running' else 'ready','message':'Tailscale reports this computer connected.' if s=='Running' else 'Ready when you are. Approval is required before any setup changes.'})
+   except Exception:self.events.put({'state':'ready','message':'Tailscale is not connected. Approve setup to start its service and sign in.'})
+  threading.Thread(target=work,daemon=True).start()
+ def start(self):
+  if self.running:return
+  self.attempt+=1
+  self.running=True;self.connected=False;self.started=False;self.url=None;self.browser.configure(state='disabled');self.approve.configure(state='disabled');self.cancel_button.configure(text='Cancel setup');self.message.set('Approve the system password prompt to continue. Canceling that prompt leaves setup unchanged.')
+  def work():
+   try:
+    self.process=subprocess.Popen(['/usr/bin/pkexec','/usr/local/libexec/code-swarm-tailscale-helper'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+    if self.closing:self.process.stdin.close();self.process.terminate()
+    for line in self.process.stdout:
+     try:self.events.put(json.loads(line))
+     except ValueError:pass
+    rc=self.process.wait();self.events.put({'state':'ended','code':rc})
+   except OSError:self.events.put({'state':'failed','message':'The system approval prompt could not start. Close this window and retry.'});self.events.put({'state':'ended','code':1})
+  threading.Thread(target=work,daemon=True).start()
+  attempt=self.attempt
+  self.root.after(90000,lambda:self.approval_timeout(attempt))
+ def approval_timeout(self,attempt):
+  if attempt!=self.attempt:return
+  if self.running and not self.started and self.process:
+   self.message.set('The password prompt timed out. Cancel it if still visible, then retry.')
+   try:self.process.terminate()
+   except OSError:pass
+ def open_browser(self):
+  if self.url and safe_url(self.url):
+   try:subprocess.Popen(['/usr/bin/firefox-esr',self.url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+   except OSError:self.message.set('Firefox could not open. Retry with Open sign-in in Firefox.')
+ def apply(self,e):
+  state=e.get('state')
+  if state=='ended':
+   self.running=False;self.process=None;self.url=None;self.browser.configure(state='disabled');self.approve.configure(state='disabled' if self.connected else 'normal',text='Connected' if self.connected else 'Retry connection');self.cancel_button.configure(text='Close')
+   if e.get('code') in (126,127):self.message.set('System approval was canceled or denied. No setup action was authorized. You can retry.')
+   if self.closing:self.root.destroy()
+   return
+  if e.get('message'):self.message.set(e['message'])
+  if state=='starting':self.started=True
+  if state=='connected':self.connected=True;self.approve.configure(state='disabled');self.browser.configure(state='disabled')
+  if state=='signin' and safe_url(e.get('url','')):
+   self.url=e['url'];self.browser.configure(state='normal');self.open_browser()
+ def drain(self):
+  while not self.events.empty():self.apply(self.events.get())
+  if self.closing and not self.running:return
+  if self.root.winfo_exists():self.root.after(100,self.drain)
+ def cancel(self):
+  if not self.running:self.root.destroy();return
+  self.closing=True;self.message.set('Stopping setup… The approved service may remain enabled. Browser sign-in is not revoked.')
+  p=self.process
+  if p and not self.started:
+   try:p.terminate()
+   except OSError:pass
+  if p and p.stdin:
+   try:p.stdin.close()
+   except OSError:pass
+  # A pending polkit prompt must be canceled by its owner; do not bypass it.
+if __name__=='__main__':
+ root=tk.Tk();Setup(root);root.mainloop()

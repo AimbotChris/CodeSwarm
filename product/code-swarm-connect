@@ -1,0 +1,168 @@
+#!/usr/bin/python3
+"""Owner-controlled setup. Authentication links exist only in this process/UI."""
+import json,queue,re,subprocess,threading,time,tkinter as tk
+from tkinter import ttk
+
+LINK_FRESH_SECONDS=8
+
+def safe_url(value):
+ return isinstance(value,str) and re.fullmatch(r'https://login\.tailscale\.com/a/[A-Za-z0-9_-]{1,256}',value) is not None
+
+def qr_matrix(value):
+ if not safe_url(value):raise ValueError('Untrusted approval address')
+ import qrcode
+ qr=qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M,border=4,box_size=1)
+ qr.add_data(value);qr.make(fit=True)
+ return qr.get_matrix()
+
+class Setup:
+ def __init__(self,root):
+  self.root=root;self.process=None;self.events=queue.Queue();self.url=None;self.copied_url=None;self.link_deadline=0;self.qr_image=None
+  self.closing=False;self.running=False;self.connected=False;self.started=False;self.attempt=0;self.waiting_admin=False
+  root.title('Connect Tailscale — Code Swarm OS');root.geometry('760x660');root.minsize(700,620)
+  frame=ttk.Frame(root,padding=22);frame.pack(fill='both',expand=True)
+  ttk.Label(frame,text='Connect from your Mac or phone',font=('DejaVu Sans',20,'bold')).pack(anchor='w')
+  ttk.Label(frame,text='Use your usual browser and passkey to approve this worker.',wraplength=700,padding=(0,8)).pack(anchor='w')
+  ttk.Label(frame,text='Your local approval enables Tailscale at startup with standard VPN, DNS and firewall integration. Then scan or copy its sign-in link. Opening Firefox here is optional.\nNo remote desktop, SSH, exit node, public sharing or assistant access is enabled.',wraplength=700,padding=(0,4)).pack(anchor='w')
+  self.message=tk.StringVar(value='Checking this computer…')
+  ttk.Label(frame,textvariable=self.message,wraplength=700,padding=(0,12)).pack(anchor='w')
+  panel=ttk.Frame(frame);panel.pack(fill='x',pady=8)
+  left=ttk.Frame(panel);left.pack(side='left',fill='both',expand=True,padx=(0,12))
+  ttk.Label(left,text='Current device sign-in link',font=('DejaVu Sans',11,'bold')).pack(anchor='w')
+  self.link_text=tk.Text(left,height=4,width=43,wrap='char',font=('DejaVu Sans Mono',11),state='disabled',exportselection=False)
+  self.link_text.pack(fill='x',pady=8)
+  self.link_text.bind('<Control-c>',lambda event:self.copy_link())
+  self.link_text.bind('<Control-C>',lambda event:self.copy_link())
+  self.link_text.bind('<<Copy>>',lambda event:self.copy_link())
+  row=ttk.Frame(left);row.pack(anchor='w')
+  self.copy_button=ttk.Button(row,text='Copy Link',command=self.copy_link,state='disabled');self.copy_button.pack(side='left',padx=(0,8))
+  self.browser=ttk.Button(row,text='Open Firefox here (optional)',command=self.open_browser,state='disabled');self.browser.pack(side='left')
+  self.link_note=tk.StringVar(value='The link and QR appear after local approval.')
+  ttk.Label(left,textvariable=self.link_note,wraplength=425,padding=(0,10)).pack(anchor='w')
+  self.qr_label=ttk.Label(panel,text='QR appears here',anchor='center',width=26);self.qr_label.pack(side='right',padx=4)
+  buttons=ttk.Frame(frame);buttons.pack(fill='x',pady=10)
+  self.approve=ttk.Button(buttons,text='Approve and connect',command=self.start);self.approve.pack(side='left',padx=(0,10))
+  self.cancel_button=ttk.Button(buttons,text='Close',command=self.cancel);self.cancel_button.pack(side='left')
+  ttk.Label(frame,text='Keep this window open while approving. Links are temporary: do not save or share them. Closing clears the display and this app’s copied link; clipboard history on other devices cannot be erased here.\n\nYour password is entered only in the system prompt. Canceling does not revoke a completed sign-in or disable the approved service.',wraplength=700,padding=(0,8)).pack(anchor='w')
+  root.report_callback_exception=self.callback_error
+  root.protocol('WM_DELETE_WINDOW',self.cancel);root.after(100,self.drain);self.check()
+ def callback_error(self,*unused):
+  # Never put a URL or exception payload into the session journal.
+  self.clear_link();self.message.set('Setup encountered a display error. Close this window and retry.')
+ def check(self):
+  attempt=self.attempt
+  def work():
+   try:
+    r=subprocess.run(['/usr/bin/tailscale','status','--json'],capture_output=True,text=True,timeout=4);state=json.loads(r.stdout).get('BackendState')
+   except Exception:state=None
+   if state=='Running':e={'state':'connected','message':'Connected — confirmed by Tailscale on this computer.'}
+   elif state=='NeedsMachineAuth':e={'state':'approval','message':'Signed in, but waiting for a tailnet administrator to approve this device. Choose Check approval to refresh its status without another password prompt.'}
+   else:e={'state':'ready','message':'Ready. Approve local setup to request a link for your Mac or phone.'}
+   self.events.put(dict(e,attempt=attempt))
+  threading.Thread(target=work,daemon=True).start()
+ def start(self):
+  if self.running or self.connected:return
+  if self.waiting_admin:self.check();return
+  self.attempt+=1;attempt=self.attempt;self.closing=False;self.clear_link()
+  self.running=True;self.connected=False;self.started=False
+  self.approve.configure(state='disabled');self.cancel_button.configure(text='Cancel setup')
+  self.message.set('Approve the system password prompt. Canceling that prompt leaves setup unchanged.')
+  def work():
+   try:
+    p=subprocess.Popen(['/usr/bin/pkexec','/usr/local/libexec/code-swarm-tailscale-helper'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True)
+    self.process=p
+    if self.closing:p.stdin.close();p.terminate()
+    for line in p.stdout:
+     try:
+      e=json.loads(line)
+      if isinstance(e,dict):self.events.put(dict(e,attempt=attempt))
+     except ValueError:pass
+    self.events.put({'state':'ended','code':p.wait(),'attempt':attempt})
+   except OSError:
+    self.events.put({'state':'failed','message':'The system approval prompt could not start. Retry setup.','attempt':attempt})
+    self.events.put({'state':'ended','code':1,'attempt':attempt})
+  threading.Thread(target=work,daemon=True).start()
+  self.root.after(90000,lambda:self.approval_timeout(attempt))
+ def approval_timeout(self,attempt):
+  if attempt!=self.attempt:return
+  if self.running and not self.started and self.process:
+   self.clear_link();self.message.set('The password prompt timed out. Cancel it if still visible, then retry.')
+   try:self.process.terminate()
+   except OSError:pass
+ def clear_link(self):
+  if self.copied_url or self.url:
+   try:
+    if self.root.clipboard_get() in (self.copied_url,self.url):self.root.clipboard_clear()
+   except tk.TclError:pass
+  self.copied_url=None;self.url=None;self.link_deadline=0;self.qr_image=None
+  self.link_text.configure(state='normal');self.link_text.delete('1.0','end');self.link_text.configure(state='disabled');self.link_text.tag_remove('sel','1.0','end')
+  self.copy_button.configure(state='disabled');self.browser.configure(state='disabled');self.qr_label.configure(image='',text='No active QR')
+  self.link_note.set('No current sign-in link. Start or retry setup when ready.')
+ def show_link(self,url):
+  if not safe_url(url):self.clear_link();return
+  changed=url!=self.url
+  if changed:
+   self.clear_link();self.url=url
+   self.link_text.configure(state='normal');self.link_text.insert('1.0',url);self.link_text.configure(state='disabled')
+   try:
+    matrix=qr_matrix(url);side=len(matrix);img=tk.PhotoImage(width=side,height=side)
+    img.put(' '.join('{'+' '.join('#000000' if bit else '#ffffff' for bit in row)+'}' for row in matrix))
+    self.qr_image=img.zoom(max(1,210//side));self.qr_label.configure(image=self.qr_image,text='')
+   except Exception:
+    self.qr_image=None;self.qr_label.configure(image='',text='QR unavailable\nUse Copy Link')
+  self.link_deadline=time.monotonic()+LINK_FRESH_SECONDS
+  self.copy_button.configure(state='normal');self.browser.configure(state='normal')
+  if changed:self.link_note.set('Scan with your phone, or copy to your Mac. This link is generated by Tailscale for this worker.')
+ def fresh_link(self):
+  if not (self.running and not self.closing and safe_url(self.url) and time.monotonic()<self.link_deadline):
+   self.clear_link();return False
+  return True
+ def copy_link(self):
+  if self.fresh_link():
+   self.root.clipboard_clear();self.root.clipboard_append(self.url);self.copied_url=self.url
+   self.link_note.set('Link copied. Approve on your trusted device, then return here.')
+  return 'break'
+ def open_browser(self):
+  if self.fresh_link():
+   try:subprocess.Popen(['/usr/bin/firefox-esr',self.url],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+   except OSError:self.message.set('Firefox could not open. Copy the link or scan the QR on another device.')
+ def apply(self,e):
+  if e.get('attempt',self.attempt)!=self.attempt:return
+  state=e.get('state')
+  if self.closing and state!='ended':return
+  if state=='ended':
+   self.running=False;self.process=None;self.clear_link()
+   self.approve.configure(state='disabled' if self.connected else 'normal',text='Connected' if self.connected else ('Check approval' if self.waiting_admin else 'Retry / check status'));self.cancel_button.configure(text='Close')
+   if e.get('code') in (126,127):self.message.set('System approval was canceled or denied. No setup action was authorized. You can retry.')
+   if self.closing:self.root.destroy()
+   return
+  if state=='approval':self.waiting_admin=True
+  elif state not in ('timeout','failed','cancelled'):self.waiting_admin=False
+  if e.get('message'):self.message.set(e['message'])
+  if state=='starting':self.started=True
+  if state=='connected':
+   self.connected=True;self.clear_link();self.approve.configure(state='disabled',text='Connected')
+  elif state=='signin':
+   if self.running:self.show_link(e.get('url',''))
+  else:
+   self.clear_link()
+   if state=='approval' and not self.running:self.approve.configure(text='Check approval')
+ def drain(self):
+  while not self.events.empty():self.apply(self.events.get())
+  if self.url and time.monotonic()>=self.link_deadline:
+   self.clear_link();self.message.set('Waiting for a fresh link from Tailscale. The previous link was cleared; retry if this continues.')
+  if self.closing and not self.running:return
+  if self.root.winfo_exists():self.root.after(100,self.drain)
+ def cancel(self):
+  self.clear_link()
+  if not self.running:self.root.destroy();return
+  self.closing=True;self.message.set('Stopping setup… The approved service may remain enabled. Sign-in on another device is not revoked.')
+  p=self.process
+  if p and not self.started:
+   try:p.terminate()
+   except OSError:pass
+  if p and p.stdin:
+   try:p.stdin.close()
+   except OSError:pass
+if __name__=='__main__':
+ root=tk.Tk();Setup(root);root.mainloop()

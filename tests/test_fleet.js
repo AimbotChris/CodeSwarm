@@ -1,0 +1,4 @@
+const fs=require('node:fs');const assert=require('node:assert/strict');const html=fs.readFileSync('fleet/offline-inventory.html','utf8');const code=html.slice(html.indexOf('function validate('),html.indexOf('function save('));const validate=new Function(code+';return validate;')();
+assert.equal(validate({name:'My PC',url:'https://pc.tailnet.ts.net/vnc.html'}).name,'My PC');
+for(const url of ['javascript:alert(1)','http://pc.tailnet.ts.net','https://pc.tailnet.ts.net.evil.example','https://user:pass@pc.tailnet.ts.net','https://pc.tailnet.ts.net:8443','https://pc.tailnet.ts.net?password=secret','https://pc.tailnet.ts.net/#secret']) assert.throws(()=>validate({name:'PC',url}));
+assert.match(html,/title.textContent=device.name/);assert.match(html,/Status unknown/);assert.match(html,/noopener noreferrer/);console.log('PASS: valid HTTPS tailnet URL; seven unsafe URL cases; text rendering; honest status; isolated new tab');

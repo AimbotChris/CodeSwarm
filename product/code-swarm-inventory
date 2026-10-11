@@ -1,0 +1,24 @@
+#!/usr/bin/python3
+"""Read-only package coverage; no installation or project dependency mutation."""
+import apt,json,shutil,subprocess,pathlib
+APPROVED={'deb.debian.org','security.debian.org','persistent.oaistatic.com','pkgs.tailscale.com'}
+def covered(pkg,c):
+ if not c:return False
+ for o in c.origins:
+  if not o.trusted:continue
+  if o.site in {'deb.debian.org','security.debian.org'} and o.origin=='Debian':return True
+  if o.site=='persistent.oaistatic.com' and pkg=='chatgpt':return True
+  if o.site=='pkgs.tailscale.com' and pkg in {'tailscale','tailscale-archive-keyring'}:return True
+ return False
+def inventory():
+ cache=apt.Cache();held=set(subprocess.check_output(['apt-mark','showhold'],text=True).split());rows=[]
+ for p in cache:
+  if not p.is_installed:continue
+  c=p.candidate;ok=covered(p.name,c)
+  rows.append({'name':p.name,'installed':p.installed.version,'candidate':c.version if c else None,'held':p.name in held,'coverage':'approved-source-check-only' if ok else 'unavailable-or-excluded-origin','upgradable':p.is_upgradable,'origins':[{'site':o.site,'origin':o.origin,'archive':o.archive,'trusted':o.trusted} for o in c.origins] if c else []})
+ flatpak='not-installed'
+ if shutil.which('flatpak'):
+  r=subprocess.run(['flatpak','list','--app','--columns=application,version,origin'],capture_output=True,text=True,timeout=15)
+  flatpak={'inventory':r.stdout.splitlines(),'policy':'separate review required; no update executor','error':r.returncode!=0}
+ return {'product':'Code Swarm OS','installation_enabled':False,'assistant_channel':'not-enrolled','apt':rows,'flatpak':flatpak,'python_node_projects':'Only explicitly registered, pinned environments may be reviewed. No bulk pip/npm upgrades.','manual_apps':'Unmanaged; no claim of automatic discovery or updates.','rollback':'not-proven'}
+if __name__=='__main__':print(json.dumps(inventory(),indent=2))

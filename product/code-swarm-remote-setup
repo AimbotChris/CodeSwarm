@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+"""Prepare target-only configuration. Never enroll, create credentials or enable services."""
+import argparse,os,pathlib,pwd,re
+p=argparse.ArgumentParser(description=__doc__);p.add_argument('--user',required=True);p.add_argument('--access-model',choices=['session','greeter'],required=True,help='session: access after local login; greeter: privileged authenticated remote login screen');args=p.parse_args()
+if os.geteuid()!=0: raise SystemExit('Run with sudo on the installed Code Swarm worker.')
+release=pathlib.Path('/etc/os-release').read_text()
+if 'ID=debian' not in release or 'VERSION_ID="13"' not in release: raise SystemExit('This helper is only for the installed Debian 13 worker.')
+if not re.fullmatch('[a-z_][a-z0-9_-]{0,31}',args.user): raise SystemExit('Invalid local account name.')
+user=pwd.getpwnam(args.user)
+if user.pw_uid<1000 or not pathlib.Path(user.pw_dir).is_dir(): raise SystemExit('Choose an existing ordinary desktop account.')
+config=pathlib.Path('/etc/codex-remote');config.mkdir(mode=0o750,exist_ok=True)
+if (config/'enabled').exists(): raise SystemExit('Already enabled; review existing remote setup before changing owner.')
+(config/'owner').write_text(args.user+'\n');os.chmod(config/'owner',0o644)
+(config/'access-model').write_text(args.access_model+'\n');os.chmod(config/'access-model',0o644)
+os.chown(config,0,pwd.getpwnam('www-data').pw_gid);os.chmod(config,0o755)
+print('Prepared for '+args.user+'. No services enabled and no credentials created.')
+if args.access_model=='greeter':print('Greeter mode requires an explicitly enabled root VNC service. It exposes the physical login screen behind tailnet, web and VNC authentication; OS/keyring passwords remain required.')
+print('Follow /usr/share/code-swarm/REMOTE-ACCESS.md on this worker to approve and enable access.')

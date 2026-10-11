@@ -1,0 +1,42 @@
+#!/usr/bin/python3
+"""Read a separately signed permit and persist a fail-closed review result.
+No install/reboot action is implemented. Root-only, never exposed to workloads.
+"""
+import fcntl,hashlib,json,os,pathlib,subprocess,sys,time
+base=pathlib.Path('/var/lib/codex-control');trust=pathlib.Path('/etc/codex-control/approver-public.pem')
+def protected(p):
+ s=p.lstat()
+ if s.st_uid!=0 or s.st_mode&0o022 or p.is_symlink():raise SystemExit('unprotected control path')
+if os.geteuid()!=0:raise SystemExit('root control principal required')
+for p in (base,trust.parent,trust):protected(p)
+with open(base/'lock','a') as lock:
+ fcntl.flock(lock,fcntl.LOCK_EX)
+ raw=pathlib.Path(sys.argv[1]).read_bytes()
+ if len(raw)>16384:raise SystemExit('permit too large')
+ # Copy inputs under root lock before verifying; never parse one file and verify another.
+ message=base/'permit-input';message.write_bytes(raw)
+ sig=base/'permit-input.sig';sig.write_bytes(pathlib.Path(sys.argv[2]).read_bytes())
+ subprocess.run(['openssl','pkeyutl','-verify','-pubin','-inkey',str(trust),'-rawin','-in',str(message),'-sigfile',str(sig)],check=True)
+ p=json.loads(raw);now=int(time.time());device=pathlib.Path('/etc/machine-id').read_text().strip()
+ pending=(base/'pending').read_text().strip()
+ if len(pending)!=64 or any(c not in '0123456789abcdef' for c in pending):raise SystemExit('invalid pending digest')
+ manifest=(base/'proposals'/pending/'manifest.json').read_bytes()
+ if hashlib.sha256(manifest).hexdigest()!=pending:raise SystemExit('manifest changed')
+ result='deferred-unverified-desktop-lifecycle'
+ if p.get('device')!=device or json.loads(manifest).get('device')!=device:result='wrong-device'
+ elif p.get('manifest')!=pending:result='changed-manifest'
+ elif type(p.get('expires'))!=int or not now < p['expires'] <= now+900:result='expired-or-unbounded'
+ elif p.get('action')!='review-staged-update':result='invalid-action'
+ elif not isinstance(p.get('nonce'),str) or not 16<=len(p['nonce'])<=128:result='invalid-nonce'
+ else:
+  spent=base/'spent';spent.mkdir(mode=0o700,exist_ok=True)
+  token=spent/hashlib.sha256(p['nonce'].encode()).hexdigest()
+  try:
+   with token.open('x') as f:
+    f.write(str(now));f.flush();os.fsync(f.fileno())
+   directory_fd=os.open(spent,os.O_DIRECTORY);os.fsync(directory_fd);os.close(directory_fd)
+  except FileExistsError:result='replayed'
+ # Single use even when valid approval defers; fresh review required afterward.
+ state={'state':result,'manifest':pending,'time':now,'apply_enabled':False}
+ temporary=base/'state.tmp';temporary.write_text(json.dumps(state));os.replace(temporary,base/'state.json')
+ print(json.dumps(state))
