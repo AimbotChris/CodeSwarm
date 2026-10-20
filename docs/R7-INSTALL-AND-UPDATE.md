@@ -1,5 +1,9 @@
 # Code Swarm OS R7 — approve Tailscale on your Mac or phone
 
+This document describes the historical R7 image. See [current status](STATUS.md)
+and [coding workflows](WORKFLOWS.md) for the newer source. Referenced release
+artifacts are not supplied by this repository.
+
 ## Existing R6: no reinstall needed
 
 Use `code-swarm-connect-r7-update.tar.gz` and `SHA256SUMS-r7-update`. Verify the archive checksum, extract it, and follow its README. Close Connect Tailscale first. Install the small QR dependency from signed Debian repositories and apply the two-file patch with normal owner sudo authentication:

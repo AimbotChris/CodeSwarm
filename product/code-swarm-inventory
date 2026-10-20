@@ -20,5 +20,7 @@ def inventory():
  if shutil.which('flatpak'):
   r=subprocess.run(['flatpak','list','--app','--columns=application,version,origin'],capture_output=True,text=True,timeout=15)
   flatpak={'inventory':r.stdout.splitlines(),'policy':'separate review required; no update executor','error':r.returncode!=0}
- return {'product':'Code Swarm OS','installation_enabled':False,'assistant_channel':'not-enrolled','apt':rows,'flatpak':flatpak,'python_node_projects':'Only explicitly registered, pinned environments may be reviewed. No bulk pip/npm upgrades.','manual_apps':'Unmanaged; no claim of automatic discovery or updates.','rollback':'not-proven'}
+ try:toolchain=json.loads(pathlib.Path('/usr/share/code-swarm/toolchain.json').read_text())
+ except (OSError,ValueError):toolchain=None
+ return {'product':'Code Swarm OS','installation_enabled':False,'assistant_channel':'not-enrolled','apt':rows,'flatpak':flatpak,'bundled_toolchain':toolchain,'toolchain_updates':'Pinned image inputs; separate owner review/rebuild required. Provider self-updates are not covered by the APT approval executor.','python_node_projects':'Only explicitly registered, pinned environments may be reviewed. No bulk pip/npm upgrades.','manual_apps':'Unmanaged; no claim of automatic discovery or updates.','rollback':'not-proven'}
 if __name__=='__main__':print(json.dumps(inventory(),indent=2))

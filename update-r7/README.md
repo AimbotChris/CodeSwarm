@@ -1,5 +1,8 @@
 # R6 → R7 connection-window patch
 
+Legacy patch source only. A packaged update archive and its release checksum are
+not published in this repository. This patch does not add the current workflow tools.
+
 Owner-installed patch for the verified R6 image. No reinstall or reboot is required. Close Connect Tailscale and finish/cancel any setup attempt before installing. This replaces only its window and fixed-action helper. It does not enroll Tailscale, sign in to ChatGPT, restart services, change network settings, or alter sudo/polkit permissions.
 
 Verify the downloaded archive against SHA256SUMS-r7-update, extract it, and open its directory. Then run:

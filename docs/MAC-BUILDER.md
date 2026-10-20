@@ -1,6 +1,6 @@
 # Build an amd64 thin-client installer on a Mac
 
-Status: implemented prototype; synthetic tests pass on Agent PC. An actual Mac build and private-image boot/enrollment remain unverified. No Mac dependency or setting was changed during implementation.
+Status: implemented prototype; synthetic source tests pass on Linux. An actual Mac build and private-image boot/enrollment remain unverified. No Mac dependency or setting was changed during implementation.
 
 ## Prerequisites
 
@@ -23,6 +23,10 @@ python3 builder/mac.py doctor
 python3 builder/mac.py build --output "$HOME/CodeSwarm-clean-01"
 ```
 
+For an agent-created personal recipe, add `--recipe /path/to/my-workflow.json`
+to the build command. Markdown recipes based on `BUILD-MY-ISO.md` also work. Without
+a recipe, the full default tool bundle is included. See [agent build](AGENT-BUILD.md).
+
 You can also open `Build CodeSwarm.command` and choose a menu item. Outputs must be new directories outside the repository. The tool refuses overwrite and simultaneous builder operations. `doctor` is read-only and does not create a VM. `build` creates/starts only `codeswarm-builder-v1`, uses a pinned official Debian cloud image, checks actual guest amd64 architecture, copies an explicit source-file allowlist, and builds on the guest Linux filesystem at `/work`.
 
 Every build discards that dedicated VM's previous `/work` tree after checking its ownership marker. Public vendor downloads are cached by SHA256 at `/var/cache/code-swarm-inputs`; the Lima base image is also cached. Chroots and personalized filesystem trees are never reused as public input. Build progress comes from five explicit stages and the Debian tools. A failed build is not reported as an ISO; the VM is stopped and its partial `/work` remains for diagnosis. Do not interrupt a build by starting a second Lima command yourself.
@@ -31,6 +35,8 @@ Successful output:
 
 - `code-swarm-amd64.iso`, `SHA256SUMS`
 - `packages.tsv`, `builder-packages.tsv`
+- `toolchain.json`, `toolchain-versions.txt`
+- `workflow.json`
 - `builder-config.yaml`, `source-sha256.json`
 
 The tool verifies the downloaded ISO checksum. You can independently run `shasum -a 256 -c SHA256SUMS` from the output directory. This repository provides no disk-writing command: separately choose a USB-writing tool and explicitly confirm the USB device. Booting the installer still requires disk selection and installation confirmation.

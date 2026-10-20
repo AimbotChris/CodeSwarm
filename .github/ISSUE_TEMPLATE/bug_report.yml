@@ -1,0 +1,25 @@
+name: Bug report
+description: Report a reproducible problem without credentials or private artifacts.
+body:
+  - type: markdown
+    attributes:
+      value: For security concerns, read SECURITY.md before posting. Never include live auth links, credentials or private images.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit or image version, hardware/VM, and operating system.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include expected and observed behavior. Use synthetic data.
+    validations:
+      required: true
+  - type: textarea
+    id: checks
+    attributes:
+      label: Relevant checks or logs
+      description: Remove credentials, account identifiers and live authorization URLs.

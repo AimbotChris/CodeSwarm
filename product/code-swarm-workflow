@@ -1,0 +1,141 @@
+#!/usr/bin/python3
+"""Choose a personal workflow. No account setup runs as root or during imaging."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+
+TOOLS = {
+    'chatgpt': ('ChatGPT', ['systemctl', '--user', 'start', 'codex-desktop.service'], None),
+    't3': ('T3 Code', ['systemctl', '--user', 'start', 'code-swarm-t3.service'], None),
+    'codex': ('Codex CLI', ['xterm', '-hold', '-e', 'codex'], ['codex', 'login']),
+    'claude': ('Claude Code', ['xterm', '-hold', '-e', 'claude'], ['claude', 'auth', 'login']),
+    'opencode': ('OpenCode', ['xterm', '-hold', '-e', 'opencode'], ['opencode', 'auth', 'login']),
+    'terminal': ('Terminal', ['xterm'], None),
+    'none': ('Home only', [], None),
+}
+
+
+def preference_path():
+    return Path(os.environ.get('XDG_CONFIG_HOME', str(Path.home() / '.config'))) / 'code-swarm/workflow.json'
+
+
+def get_default():
+    fallback = 'chatgpt'
+    try:
+        name = json.loads(Path('/etc/code-swarm/workflow.json').read_text())['startup']
+        if name in TOOLS:
+            fallback = name
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    try:
+        name = json.loads(preference_path().read_text())['startup']
+        return name if name in TOOLS else fallback
+    except (OSError, ValueError, KeyError, TypeError):
+        return fallback
+
+
+def set_default(name):
+    if name not in TOOLS:
+        raise ValueError('Unknown workflow')
+    path = preference_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    import tempfile
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix='.workflow-')
+    try:
+        with os.fdopen(fd, 'w') as stream:
+            json.dump({'startup': name}, stream)
+            stream.write('\n')
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def command(name, login=False):
+    _, start, auth = TOOLS[name]
+    if login:
+        if auth is None:
+            raise ValueError('Sign in inside this application')
+        return ['xterm', '-hold', '-e', *auth]
+    return start
+
+
+def launch(name, login=False):
+    args = command(name, login)
+    if args:
+        subprocess.Popen(args)
+
+
+def gui():
+    import tkinter as tk
+    from tkinter import ttk, messagebox
+    root = tk.Tk()
+    root.title('Code Swarm — Workflows')
+    frame = ttk.Frame(root, padding=20)
+    frame.pack(fill='both', expand=True)
+    ttk.Label(frame, text='Choose your workflow', font=('DejaVu Sans', 18, 'bold')).pack(anchor='w')
+    ttk.Label(frame, text='Open your tools and sign in with your own account.\n'
+              'T3 Code: open Settings → Providers to enable your preferred agents.\n'
+              'Provider CLIs also work directly from any project terminal.', padding=(0, 12)).pack(anchor='w')
+    availability = {'chatgpt': 'chatgpt', 't3': 't3code', 'codex': 'codex', 'claude': 'claude',
+                    'opencode': 'opencode', 'terminal': 'xterm'}
+    def run(name, login=False):
+        try:
+            launch(name, login)
+        except (OSError, ValueError) as error:
+            messagebox.showerror('Could not launch workflow', str(error), parent=root)
+    for name, binary in availability.items():
+        if not shutil.which(binary):
+            continue
+        row = ttk.Frame(frame)
+        row.pack(fill='x', pady=4)
+        found = bool(shutil.which(binary))
+        ttk.Label(row, text=TOOLS[name][0] + ('' if found else ' — unavailable'), width=27).pack(side='left')
+        ttk.Button(row, text='Open', command=lambda n=name: run(n), state='normal' if found else 'disabled').pack(side='left', padx=4)
+        if TOOLS[name][2]:
+            ttk.Button(row, text='Sign in', command=lambda n=name: run(n, True), state='normal' if found else 'disabled').pack(side='left')
+    ttk.Separator(frame).pack(fill='x', pady=14)
+    ttk.Label(frame, text='Open at login').pack(anchor='w')
+    names = [n for n, binary in availability.items() if shutil.which(binary)] + ['none']
+    current = get_default()
+    if current not in names:
+        current = 'none'
+    selected = tk.StringVar(value=TOOLS[current][0])
+    ttk.Combobox(frame, textvariable=selected, values=[TOOLS[n][0] for n in names], state='readonly').pack(fill='x', pady=6)
+    status = tk.StringVar()
+    def save():
+        try:
+            name = next(n for n in names if TOOLS[n][0] == selected.get())
+            set_default(name)
+            status.set('Saved. Applies next time you log in.')
+        except OSError as error:
+            messagebox.showerror('Could not save preference', str(error), parent=root)
+    ttk.Button(frame, text='Save startup choice', command=save).pack(anchor='w')
+    ttk.Label(frame, textvariable=status).pack(anchor='w', pady=6)
+    ttk.Label(frame, text='Git is ready in the terminal. Configure your name/email and repository access yourself.\n'
+              'Other agents can be installed in your account using their official instructions.\n'
+              'Accounts, subscriptions and API access are separate from the OS login.').pack(anchor='w', pady=8)
+    root.mainloop()
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('action', nargs='?', default='gui', choices=['gui', 'autostart', 'start', 'login', 'set-default', 'get-default'])
+    parser.add_argument('tool', nargs='?', choices=list(TOOLS))
+    args = parser.parse_args()
+    if args.action in {'start', 'login', 'set-default'} and args.tool is None:
+        parser.error('Choose a tool')
+    if args.action == 'gui':
+        gui()
+    elif args.action == 'get-default':
+        print(get_default())
+    elif args.action == 'set-default':
+        set_default(args.tool)
+    else:
+        launch(get_default() if args.action == 'autostart' else args.tool, args.action == 'login')
+
+
+if __name__ == '__main__':
+    main()

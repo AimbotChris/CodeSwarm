@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -88,7 +89,11 @@ def source_paths(root=ROOT):
         result.append((path, name))
     return result
 
-def archive(destination, root=ROOT):
+def archive(destination, root=ROOT, recipe=None):
+    if recipe is not None:
+        helper = runpy.run_path(str(ROOT/'builder/recipe.py'))
+        helper['bundle'](destination, helper['read'](recipe), root)
+        return
     with tarfile.open(destination, 'w') as tar:
         for path, name in source_paths(root):
             info = tar.gettarinfo(str(path), arcname=name)
@@ -134,7 +139,9 @@ def verify_output(output, name):
     if len(expected) != 2 or expected[1] != name or sha(output/name) != expected[0]:
         raise RuntimeError('Output SHA256 verification failed; do not use the image.')
 
-def build(output):
+def build(output, recipe=None):
+    if recipe is not None:
+        runpy.run_path(str(ROOT/'builder/recipe.py'))['read'](recipe)
     doctor(output)
     output = fresh_output(output)
     vm_ready()
@@ -143,15 +150,18 @@ def build(output):
         shell('sudo', 'sh', '-c', 'test "$(cat /etc/code-swarm-builder)" = codeswarm-builder-v1 && rm -rf /work && mkdir -m 755 /work')
         with tempfile.TemporaryDirectory(prefix='codeswarm-source-') as temp:
             bundle = Path(temp)/'source.tar'
-            archive(bundle)
+            archive(bundle, recipe=recipe)
             with bundle.open('rb') as f:
                 shell('sudo', 'tar', '-xf', '-', '-C', '/work', stdin=f)
         shell('sudo', 'bash', '/work/builder/guest-build.sh')
-        for name in ('code-swarm-amd64.iso', 'SHA256SUMS', 'packages.tsv', 'builder-packages.tsv'):
+        for name in ('code-swarm-amd64.iso', 'SHA256SUMS', 'packages.tsv', 'builder-packages.tsv', 'toolchain.json', 'toolchain-versions.txt', 'workflow.json'):
             download('/work/output/'+name, output/name)
         verify_output(output, 'code-swarm-amd64.iso')
         shutil.copyfile(ROOT/'builder/lima.yaml', output/'builder-config.yaml')
-        (output/'source-sha256.json').write_text(json.dumps({n: sha(p) for p,n in source_paths()}, indent=2)+'\n')
+        if recipe is not None:
+            download('/work/output/source-sha256.json', output/'source-sha256.json')
+        else:
+            (output/'source-sha256.json').write_text(json.dumps({n: sha(p) for p,n in source_paths()}, indent=2)+'\n')
         print('Verified ISO and package manifests: '+str(output), flush=True)
     finally:
         command(['limactl', 'stop', VM])
@@ -200,16 +210,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('action', choices=['doctor', 'build', 'personalize', 'source-archive'])
     parser.add_argument('--output', type=Path, default=Path.home()/('CodeSwarm-'+time.strftime('%Y%m%d-%H%M%S')))
+    parser.add_argument('--recipe', type=Path, help='Agent-created Markdown or JSON workflow recipe')
     args = parser.parse_args()
     if args.action == 'source-archive':
         if args.output.exists():
             raise RuntimeError('Archive output already exists.')
-        archive(args.output)
+        archive(args.output, recipe=args.recipe)
     elif args.action == 'doctor':
         doctor(args.output)
     elif args.action == 'build':
         with builder_lock():
-            build(args.output)
+            build(args.output, recipe=args.recipe)
     else:
         with builder_lock():
             personalize(args.output)
@@ -217,7 +228,7 @@ def main():
 if __name__ == '__main__':
     try:
         main()
-    except (RuntimeError, OSError, subprocess.CalledProcessError, KeyboardInterrupt) as e:
+    except (RuntimeError, ValueError, OSError, subprocess.CalledProcessError, KeyboardInterrupt) as e:
         # Never include a CalledProcessError payload or captured output that might contain a secret.
-        print('Stopped: '+(str(e) if isinstance(e, RuntimeError) else type(e).__name__+'. See docs/MAC-BUILDER.md.'), file=sys.stderr)
+        print('Stopped: '+(str(e) if isinstance(e, (RuntimeError, ValueError)) else type(e).__name__+'. See docs/MAC-BUILDER.md.'), file=sys.stderr)
         raise SystemExit(1)

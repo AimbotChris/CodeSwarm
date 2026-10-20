@@ -1,42 +1,95 @@
-# Code Swarm OS
+# CodeSwarm OS
 
-Debian 13 amd64 installer for a physical x86_64 thin client, with an Openbox/Xorg session that opens the official ChatGPT desktop application containing Codex. This is a prototype, not an OpenAI or Debian distribution.
+A lightweight Debian coding workstation for x86_64 thin clients.
 
-## Build on your Mac
+CodeSwarm brings your coding tools into one simple desktop. ChatGPT is the default
+workflow, with T3 Code, Codex CLI, Claude Code, OpenCode, Git, and a terminal also
+available. Choose what opens at login from **Home → Workflows**. Sign in with your
+own provider accounts and use the tools directly or through T3 Code.
 
-Read [the Mac builder guide](docs/MAC-BUILDER.md), install its prerequisites yourself, then:
+**Status: prototype.** This repository contains source and image-building recipes,
+not a supported OS release or a downloadable installer. The current multi-provider
+image still needs a full build, boot/install test, and hardware qualification.
+See [validation status](docs/STATUS.md) for what has actually been tested.
+
+## Make your own ISO
+
+Paste this into your coding agent of choice:
+
+> Help me build my own CodeSwarm ISO locally. Get the source from
+> https://github.com/AimbotChris/CodeSwarm and read AGENTS.md and docs/AGENT-BUILD.md.
+> Ask which coding tools I want and what should open when I log in. Explain the
+> options simply; inspect my computer yourself rather than asking me technical
+> setup questions. Save my choices, check the prerequisites, and build in an
+> isolated local Debian VM. Keep accounts and credentials out of the image.
+> Do not upload the ISO or write it to a USB or physical disk. When finished,
+> give me its local location, verified checksum, and a clear test-status summary.
+
+Your agent asks the questions and handles the build; there is no extra app or form
+to fill out. You need an agent with local computer access. The output is a Debian
+installer for an x86_64 PC, regardless of the starting computer. macOS has an
+automated launcher; Windows/Linux require agent-operated VM setup and are not yet
+validated end to end. Builds need substantial free disk space and can take hours.
+CodeSwarm does not host installer images.
+
+## What is included
+
+- Debian 13 amd64 with a small Openbox/Xorg desktop and local recovery controls.
+- ChatGPT and T3 Code, plus native Codex, Claude Code, and OpenCode CLIs.
+- Git, SSH client, ripgrep, build tools, and Debian Node.js/npm.
+- A personal startup choice: any bundled workflow, a terminal, or Home only.
+- Optional Tailscale connectivity and a local, read-only worker console.
+
+Provider accounts, subscriptions, and repository access are set up by each user.
+ChatGPT desktop and Codex CLI sign-in are separate. Other providers can be added
+using their official installers and T3's provider settings.
+
+## Try the source
 
 ```sh
 git clone https://github.com/AimbotChris/CodeSwarm.git
 cd CodeSwarm
-python3 builder/mac.py doctor
-python3 builder/mac.py build
+python3 fleet/server.py
 ```
 
-Or open **Build CodeSwarm.command** for the small guided menu. The builder creates a dedicated Debian amd64 Lima VM: Intel Macs use an x86_64 VM; Apple Silicon uses QEMU x86_64 emulation, which can take hours. It does not install Debian tools on macOS, mount your home in the VM, flash a disk, change host networking, or enroll the Mac.
+Open [127.0.0.1:8765](http://127.0.0.1:8765). The console uses Python's standard
+library. Live discovery requires an installed, connected Tailscale client;
+without it, the console shows setup guidance. This command does not install the OS.
 
-The new output directory contains an ISO, SHA256 checksum, target/builder package manifests and source hashes. Official ChatGPT 26.1007.21434 and the Debian cloud image are checksum-pinned. Signed Debian and Tailscale repositories supply other packages. This is a repeatable source recipe with recorded versions, **not a byte-identical build promise**.
+For development dependencies and tests, see [development setup](docs/DEVELOPMENT.md).
+Agents should start with [AGENTS.md](AGENTS.md).
 
-Optional `python3 builder/mac.py personalize` privately adds an owner-supplied Tailscale auth key to the last clean build. **That ISO is a credential-bearing private artifact.** Enrollment happens only after interactive installation; it preserves unique machine identity and requires network connectivity and applicable tailnet approval. See the guide before using it. No Codex credentials or existing node identity are copied.
+## Build or use the OS
 
-## Verified artifact versus new builder
+The existing build front end runs a dedicated Debian VM through Lima on macOS.
+The OS and image recipe are Linux-based; the Mac front end is optional tooling,
+not the product. A standalone Linux build launcher is not provided yet.
 
-R7 was built and tested on Agent PC: interactive UEFI USB-style boot, unchanged sentinel disk, installation to a disposable virtual disk, installed owner/password checks, official app launch, and connection-dialog cancellation. Its 3,208,970,240-byte ISO has SHA256:
+- [Build an installer](docs/MAC-BUILDER.md)
+- [Choose tools and sign in](docs/WORKFLOWS.md)
+- [Installation and recovery](docs/R7-INSTALL-AND-UPDATE.md)
+- [Optional remote access](product/REMOTE-ACCESS.md)
+- [Physical hardware checklist](docs/PHYSICAL-QUALIFICATION.md)
 
-```text
-ba47f5687e30d75705feeb2b9622ad4537230c36fdc7e2bf20a6e54bfa7eaeea
-```
+Installation requires explicit disk selection and confirmation. No script here
+automatically flashes a physical disk. Optional private enrollment images contain
+credentials and must never be published.
 
-The authoritative R7 checksum is in [R7 verification](docs/R7-VERIFICATION.md). R7 is retained on Agent PC and is not a Git artifact. The source includes newer Mac-builder and optional firstboot code; **those paths have synthetic tests but have not completed a full build on a real Mac or a real enrollment**. They do not retroactively change the tested R7 ISO. Physical thin-client model, RAM, disk, graphics, networking and firmware compatibility remain unqualified.
+## Current limits
 
-## Operation and limits
+Crash recovery detects process exits, not hangs or idle work. Fleet app status
+currently refers to ChatGPT only. Automatic update installation, global job
+draining, unattended provider sign-in, and OS rollback are not implemented.
+Pinned third-party tools need separate update review. Linux Computer Use is not
+claimed. Hardware and headless operation still require testing on each model.
 
-- Installer boot asks for language, owner password, disk selection and destructive disk confirmation. Nothing is automatically flashed or erased by this repository.
-- Installed login starts the minimal desktop and official app. First-run vendor sign-in and keyring setup remain owner actions. Desktop QR/unattended reusable authentication is not established; documented CLI device auth is a separate flow.
-- Bounded process-crash restart/backoff and recovery controls are included. This does not detect application hangs or prove global job idleness.
-- Signed update proposals and an exact-manifest/device, expiring, single-use permit model are included. Live assistant enrollment is not configured; disruptive updates fail closed. Unknown desktop work blocks safe-drain claims. APT is not rollback; no OS A/B rollback is claimed.
-- Linux Computer Use is unsupported in the official documentation. Remote desktop and Tailscale configuration remain explicit owner-controlled features.
+## Contributing and licensing
 
-See [installation/recovery](docs/R7-INSTALL-AND-UPDATE.md), [physical qualification](docs/PHYSICAL-QUALIFICATION.md), [test scope](docs/BUILDER-VERIFICATION.md), and [vendor authentication findings](docs/R7-AUTH-FEASIBILITY.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for changes and validation, and
+[SECURITY.md](SECURITY.md) for reporting security issues.
 
-Only original source/configuration and small project assets are stored here. Vendor binaries, boot images, signed-in profiles, runtime state, actual credentials, build caches and private ISOs are excluded. See [third-party notes](THIRD-PARTY.md).
+CodeSwarm's original source is licensed under [GPL-3.0-only](LICENSE).
+Third-party software retains its own licenses and terms, including proprietary
+applications downloaded by the build. See [THIRD-PARTY.md](THIRD-PARTY.md) before
+distributing an image. CodeSwarm is an independent project, not an official OpenAI,
+Anthropic, Debian, T3, or Tailscale distribution.

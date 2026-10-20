@@ -1,5 +1,7 @@
 from pathlib import Path
 import os
+import runpy
+selection=runpy.run_path('/work/builder/recipe.py')['load'](Path('/work'))
 root=Path('/work/build')
 def put(name,content,mode=0o644):
  p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text(content);p.chmod(mode)
@@ -17,8 +19,8 @@ lb config noauto --mode debian --distribution trixie --architectures amd64 \\
  --archive-areas "main contrib non-free-firmware" --apt-recommends false \\
  --mirror-bootstrap https://deb.debian.org/debian/ --mirror-chroot https://deb.debian.org/debian/ \\
  --mirror-binary https://deb.debian.org/debian/ --security true --updates true \\
- --bootappend-live "boot=live components username=chris hostname=codex-thin-client noswap noeject live-config.noroot" \\
- --iso-application "Chris Codex Thin Client Prototype" \\
+ --bootappend-live "boot=live components username=swarm hostname=code-swarm noswap noeject live-config.noroot" \\
+ --iso-application "Code Swarm OS — Debian 13" \\
  --memtest none --chroot-squashfs-compression-type zstd \\
  --chroot-squashfs-compression-level 3 "$@"
 ''',0o755)
@@ -78,12 +80,7 @@ put('config/hooks/live/0880-browser-handlers.hook.chroot','''#!/bin/sh
 set -eu
 update-desktop-database /usr/share/applications
 ''',0o755)
-put('config/includes.chroot/etc/lightdm/lightdm.conf.d/50-codex.conf','''[Seat:*]
-autologin-user=chris
-autologin-user-timeout=0
-user-session=openbox
-autologin-session=openbox
-''')
+# The installed session and password-based login are configured below.
 put('config/includes.chroot/etc/xdg/openbox/autostart','''systemctl --user import-environment DISPLAY XAUTHORITY DBUS_SESSION_BUS_ADDRESS
 dbus-update-activation-environment --systemd DISPLAY XAUTHORITY
 gnome-keyring-daemon --start --components=secrets
@@ -168,12 +165,13 @@ WantedBy=timers.target
 # Package bytes are pinned; no silent latest download during the build.
 p=root/'config/packages.chroot';p.mkdir(parents=True,exist_ok=True)
 import shutil
-shutil.copy2('/work/vendor/chatgpt_amd64.deb',p/'chatgpt_amd64.deb')
+if 'chatgpt' in selection['tools']:
+ shutil.copy2('/work/vendor/chatgpt_amd64.deb',p/'chatgpt_amd64.deb')
 shutil.copy2('/work/scripts/codex-stage',root/'config/includes.chroot/usr/local/sbin/codex-stage') if (root/'config/includes.chroot/usr/local/sbin').exists() else None
 put('config/includes.chroot/usr/local/sbin/codex-stage',Path('/work/scripts/codex-stage').read_text(),0o750)
 put('config/includes.chroot/usr/local/sbin/codex-control',Path('/work/scripts/codex-control').read_text(),0o750)
 
-# Remove Debian Live default password; retain local graphical autologin.
+# Remove Debian Live default password; installed login still requires a password.
 p=root/"config/hooks/live/0900-safety.hook.chroot"
 p.write_text(p.read_text().replace("rm -f /etc/sudoers.d/live\n", "rm -f /etc/sudoers.d/live\n" + 'sed -i \'s/^\\t_PASSWORD=.*/\\t_PASSWORD="!"/\' /usr/lib/live/config/0030-user-setup\n'))
 exec(Path('/work/scripts/add-remote.py').read_text())
@@ -204,7 +202,6 @@ font-name=DejaVu Sans 12
 indicators=~host;~session;~power
 ''')
 p=root/'config/includes.chroot/etc/xdg/openbox/autostart';p.write_text(p.read_text().replace('gnome-keyring-daemon --start --components=secrets\n',''))
-p=root/'auto/config';p.write_text(p.read_text().replace('Chris Codex Thin Client Prototype','Code Swarm OS — Debian 13'))
 
 for name in ['code-swarm.cfg','code-swarm-prepare.sh','code-swarm-disks.sh','code-swarm-hostname.sh','code-swarm-apt.py','code-swarm-admin.sh']:
  put('config/includes.binary/'+name,Path('/work/config/installer-only/'+name).read_text(),0o644)
@@ -221,3 +218,6 @@ exec(Path('/work/scripts/polish-r5.py').read_text())
 exec(Path('/work/scripts/polish-r6.py').read_text())
 
 exec(Path('/work/scripts/polish-r7.py').read_text())
+
+import runpy
+runpy.run_path('/work/scripts/configure-workflows.py')['configure'](Path('/work'), Path('/work/build'))

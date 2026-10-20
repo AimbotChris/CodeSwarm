@@ -1,5 +1,9 @@
 # Official desktop authentication: examined, not modified
 
+This document describes the historical R7 image. See [current status](STATUS.md)
+and [coding workflows](WORKFLOWS.md) for the newer source. Referenced release
+artifacts are not supplied by this repository.
+
 The installed official ChatGPT package is 26.1007.21434. Its packaged login route contains Continue to sign in, a browser continuation/copy-link fallback, and API-key/Bedrock branches. In the actual installed VM, Sign in another way opened an empty API-key form, with no QR/device-code choice. No credentials were entered or grant started. No device-code/QR entry is exposed by that first-login route. Shared internal code contains a device-code session method; that alone does not establish a supported user-facing desktop login path, and no internal APIs or feature flags were invoked.
 
 Official OpenAI authentication documentation specifies Continue to sign in followed by the browser flow for the desktop app. Its device-code instructions explicitly describe Codex CLI (`codex login --device-auth`, subject to account/workspace settings). CLI login is not assumed to authenticate this desktop app, and no credentials are copied between devices or profiles.

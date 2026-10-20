@@ -1,0 +1,61 @@
+{
+  "architecture": "amd64",
+  "inputs": [
+    {
+      "name": "t3-code",
+      "version": "v0.1.0",
+      "file": "T3-Code-0.1.0-amd64.deb",
+      "url": "https://github.com/pingdotgg/t3code/releases/download/v0.1.0/T3-Code-0.1.0-amd64.deb",
+      "sha256": "3590a63c2eb5bee21b70b229a4586322ed82140aecd8c7feb09aa80178f8639c",
+      "kind": "deb"
+    },
+    {
+      "name": "codex",
+      "version": "rust-v0.163.0",
+      "file": "codex-package-x86_64-unknown-linux-musl.tar.gz",
+      "url": "https://github.com/openai/codex/releases/download/rust-v0.163.0/codex-package-x86_64-unknown-linux-musl.tar.gz",
+      "sha256": "582646c6bf0561eb0de540f7fc85b9121b0091a826bc6e96830b7f1722122182",
+      "kind": "tar"
+    },
+    {
+      "name": "opencode",
+      "version": "v1.19.3",
+      "file": "opencode-linux-x64-baseline.tar.gz",
+      "url": "https://github.com/anomalyco/opencode/releases/download/v1.19.3/opencode-linux-x64-baseline.tar.gz",
+      "sha256": "531cff2441129c30f0edd5878af494108ad07f5feb46d7ee29a2a5b830a5765d",
+      "kind": "tar"
+    },
+    {
+      "name": "claude",
+      "version": "2.1.305",
+      "file": "claude-code-linux-x64-2.1.305.tgz",
+      "url": "https://registry.npmjs.org/@anthropic-ai/claude-code-linux-x64/-/claude-code-linux-x64-2.1.305.tgz",
+      "kind": "tar",
+      "sha256": "6d123d2953b9623e5f3e399f9984dd137dcad992aab2f810c0eac0040cae894a"
+    },
+    {
+      "name": "codex-license",
+      "version": "rust-v0.163.0",
+      "file": "codex-license.txt",
+      "url": "https://raw.githubusercontent.com/openai/codex/rust-v0.163.0/LICENSE",
+      "sha256": "d17f227e4df5da1600391338865ce0f3055211760a36688f816941d58232d8dc",
+      "kind": "notice"
+    },
+    {
+      "name": "codex-notice",
+      "version": "rust-v0.163.0",
+      "file": "codex-notice.txt",
+      "url": "https://raw.githubusercontent.com/openai/codex/rust-v0.163.0/NOTICE",
+      "sha256": "9d71575ecfd9a843fc1677b0efb08053c6ba9fd686a0de1a6f5382fd3c220915",
+      "kind": "notice"
+    },
+    {
+      "name": "opencode-license",
+      "version": "v1.19.3",
+      "file": "opencode-license.txt",
+      "url": "https://raw.githubusercontent.com/anomalyco/opencode/v1.19.3/LICENSE",
+      "sha256": "625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b",
+      "kind": "notice"
+    }
+  ]
+}

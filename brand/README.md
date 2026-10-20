@@ -1,3 +1,4 @@
-# Code Swarm mark
+# CodeSwarm mark
 
-Original lightweight SVG recreation of the user-selected project mark. Amber bracket wings, charcoal segmented body and two short antennae are intentional. OpenAI/ChatGPT marks are unchanged.
+Project artwork in SVG and PNG formats. This repository does not include vendor
+logos or claim endorsement by any bundled tool provider.

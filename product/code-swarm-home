@@ -5,6 +5,7 @@ from tkinter import ttk
 import subprocess,os,pathlib,threading,shutil
 root=tk.Tk();root.title('Code Swarm OS — Home and recovery');root.geometry('760x680+30+30')
 root.configure(bg='#14252b');root.option_add('*Font',('DejaVu Sans',11))
+has_chatgpt=bool(shutil.which('chatgpt'))
 frame=ttk.Frame(root,padding=24);frame.pack(fill='both',expand=True)
 brandrow=ttk.Frame(frame);brandrow.pack(anchor='w')
 try:
@@ -14,8 +15,9 @@ try:
 except tk.TclError: pass
 ttk.Label(brandrow,text='Code Swarm',font=('DejaVu Sans',24,'bold')).pack(side='left')
 ttk.Label(brandrow,text=' OS',foreground='#9b6500',font=('DejaVu Sans',14,'bold')).pack(side='left')
-ttk.Label(frame,text='Your Codex worker • Powered by Debian 13',padding=(0,8)).pack(anchor='w')
-status=tk.StringVar(value='Starting ChatGPT. A keyring prompt may need your attention.')
+ttk.Label(frame,text='Your coding workspace • Powered by Debian 13',padding=(0,8)).pack(anchor='w')
+ttk.Button(frame,text='Workflows — T3 Code, Codex, Claude, OpenCode',command=lambda:launch(['/usr/local/bin/code-swarm-workflow'])).pack(anchor='w',pady=4)
+status=tk.StringVar(value='Opening your startup workflow.'+(' ChatGPT may ask you to unlock the keyring.' if has_chatgpt else ''))
 ttk.Label(frame,textvariable=status,wraplength=680,padding=(0,16)).pack(anchor='w')
 def launch(args): subprocess.Popen(args,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 def start():
@@ -23,10 +25,12 @@ def start():
  launch(['systemctl','--user','start','codex-desktop'])
 row=ttk.Frame(frame);row.pack(fill='x',pady=5)
 for text,fn in [('Start ChatGPT',start),('Open browser',lambda:launch(['firefox-esr'])),('Recovery terminal',lambda:launch(['xterm']))]:
+ if text=='Start ChatGPT' and not has_chatgpt:continue
  ttk.Button(row,text=text,command=fn).pack(side='left',padx=(0,8))
 def details():launch(['xterm','-T','Code Swarm OS — diagnostics','-e','sh','-c','journalctl --user -u codex-desktop -n 60 --no-pager; printf "\\nPress Enter to close."; read answer'])
 row=ttk.Frame(frame);row.pack(fill='x',pady=10)
 for text,fn in [('Show startup log',details),('Stop ChatGPT',lambda:launch(['systemctl','--user','stop','codex-desktop'])),('Log out',lambda:launch(['openbox','--exit']))]:
+ if text!='Log out' and not has_chatgpt:continue
  ttk.Button(row,text=text,command=fn).pack(side='left',padx=(0,8))
 ttk.Separator(frame).pack(fill='x',pady=12)
 ttk.Label(frame,text='Updates and remote access',font=('DejaVu Sans',14,'bold')).pack(anchor='w')
@@ -46,7 +50,7 @@ def remote_guide():
  text.configure(state='disabled');text.focus_set();window.bind('<Escape>',lambda e:window.destroy())
 ttk.Button(frame,text='Remote access setup guide',command=remote_guide).pack(anchor='w',pady=4)
 ttk.Button(frame,text='Software inventory and update coverage',command=lambda:launch(['xterm','-T','Code Swarm OS — update coverage','-e','sh','-c','code-swarm-inventory; printf "\\nPress Enter to close."; read answer'])).pack(anchor='w')
-ttk.Label(frame,text='If startup stalls: check the keyring prompt, view the log, or use Recovery terminal.\nSigning in to ChatGPT is separate from your local computer login.',wraplength=680,padding=(0,16)).pack(anchor='w')
+ttk.Label(frame,text='Use Workflows to open tools, sign in, and choose what opens at login.'+('\nFor ChatGPT startup issues, check the keyring prompt or view its startup log.' if has_chatgpt else ''),wraplength=680,padding=(0,16)).pack(anchor='w')
 def refresh():
  try:
   disk=shutil.disk_usage(pathlib.Path.home())
@@ -54,6 +58,9 @@ def refresh():
    remote='Remote access approved locally; see Workers for verified status.' if pathlib.Path('/etc/codex-remote/enabled').exists() else 'Remote access is off. Open the setup guide to configure it.'
   except PermissionError:remote='Remote status is protected. Open the setup guide; Workers verifies configured access.'
   access.set('Updates: installation disabled; assistant enrollment requires separate setup.\n'+remote+'\nDisk free: %.1f GiB%s. App recovery detects crashes, not hangs or idle jobs.'%(disk.free/2**30,' — LOW SPACE' if disk.free<5*2**30 else ''))
+  if not has_chatgpt:
+   status.set('Choose Workflows to open your tools or change what opens at login.')
+   root.after(5000,refresh);return
   s=subprocess.check_output(['systemctl','--user','show','codex-desktop','-p','ActiveState','-p','SubState','-p','NRestarts','-p','MainPID'],text=True,timeout=2)
   vals=dict(l.split('=',1) for l in s.splitlines() if '=' in l)
   phase='ChatGPT is stopped. Choose Start ChatGPT to launch it.'

@@ -14,7 +14,7 @@ if command -v xsetroot >/dev/null 2>&1; then xsetroot -solid '#14252b'; fi
 openbox &
 wm=$!
 cleanup() {
- systemctl --user stop codex-desktop.service
+ systemctl --user stop codex-desktop.service code-swarm-t3.service
  systemctl --user stop code-swarm-vnc.service code-swarm-status.service 2>/dev/null || true
  kill "$panel" 2>/dev/null || true
 }
@@ -45,7 +45,7 @@ done
 if [ -f "$CODE_SWARM_HOME_READY" ]; then
  rm -f "$CODE_SWARM_HOME_READY"
  systemctl --user reset-failed codex-desktop.service 2>/dev/null || true
- systemctl --user start codex-desktop.service &
+ /usr/local/bin/code-swarm-workflow autostart &
 else
  echo 'Home did not become visible within 10 seconds. Opening recovery terminal; app auto-start deferred.'
  kill "$panel" 2>/dev/null || true

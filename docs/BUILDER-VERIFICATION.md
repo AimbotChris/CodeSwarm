@@ -1,26 +1,25 @@
-# Builder verification — 2026-10-11
+# Builder verification
 
-This describes source/tooling checks, separately from the previously built R7 installer.
+Use [validation status](STATUS.md) for the current source and outstanding image
+acceptance work. Use [development setup](DEVELOPMENT.md) to reproduce ordinary
+checks. [R7 verification](R7-VERIFICATION.md) covers a different historical image.
 
-- 97 Python tests pass: 78 existing app, approval, installer, patch and inventory tests plus 19 Mac-builder/firstboot tests.
-- Both existing fleet frontend suites pass.
-- An independent reviewer inspected VM isolation, secret handling, firstboot gates, source export and reproduction claims, and independently passed the 19 builder tests. Findings about concurrent builder execution and stale guest helpers were fixed and regression-tested.
-- A tiny synthetic ISO was actually remastered in the existing resource-limited disposable test container. The test verified unchanged clean-image bytes, a root-owned 0600 synthetic key under a 0700 directory, private ISO permissions, both internal MD5/SHA256 inventories, and removal of extracted private trees. It did not boot the image or start Tailscale. Test fixture source: `tests/private_remaster_smoke.py`.
-- The source export allowlist is tested against extra QA passwords, vendor binaries, runtime trees, unlisted keys, symlinks and path traversal. Only explicitly listed regular source files are exported.
-- Firstboot tests cover live/missing-owner refusal, existing identity preservation, durable claim/refusal after interruption, bounded timeout cleanup, pending administrator approval, and successful synthetic status. No real key, account, authorization URL or enrollment was used.
-- The staged-source audit checks exactly the bytes intended for Git. It rejects runtime/artifact paths, large/unexpected binaries and credential patterns, with exact synthetic test fixtures allowlisted. This is a targeted audit, not a proof against every possible secret format.
+The original builder work added synthetic tests for architecture checks, private
+state/locking, source export, firstboot eligibility, existing-identity preservation,
+claim persistence, timeout cleanup and synthetic Tailscale outcomes. The tests
+run without a real Mac, VM, account, key or provider API.
 
-Not yet performed: a full clean `live-build` run through Lima on Intel or Apple Silicon macOS; boot/install of that new output; boot/enrollment of a personalized output; real account sign-in; physical thin-client testing. The Mac is not connected or authorized for setup in this execution environment. No Mac dependency or system setting was changed.
+A maintainer also recorded a separate synthetic private-remaster smoke run. The
+fixture source is `tests/private_remaster_smoke.py`; it needs image tools and a
+disposable root environment. It checks clean-image preservation, private file
+permissions, checksum updates and cleanup. It does not boot or enroll an image.
+Private raw QA evidence from that run is not included in this repository.
 
-The verified R7 ISO remains separate and unchanged. Its prior checks do not validate the newer optional firstboot overlay or the new clean Mac build path. Existing repositories/services and R5/R6 private shares were preserved. Task-owned build/test containers were stopped after testing.
+The source audit checks selected credential patterns and forbidden artifact paths
+in working files, the Git index, or reachable history. It does not establish that
+all credentials or vulnerabilities are absent. New image inputs are explicitly
+listed in `builder/source-files.txt` and version/hash-pinned where applicable.
 
-Commands used for ordinary source tests:
-
-```sh
-python3 -m unittest discover -s tests -v
-node tests/test_fleet.js
-node tests/test_fleet_ui.js
-python3 builder/audit-source.py
-```
-
-A GitHub workflow repeats the ordinary source checks without building or publishing an ISO and without credentials. Its actual result must be checked after pushing; this document does not claim a CI run that has not occurred.
+A clean image build, real Mac run, private-image boot/enrollment and physical
+thin-client qualification remain separate acceptance steps. CI runs source tests;
+it neither builds nor publishes an ISO and receives no provider credentials.

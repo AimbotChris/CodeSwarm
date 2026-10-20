@@ -35,25 +35,11 @@ put('config/includes.chroot/etc/nginx/sites-available/codex-remote','''server {
  }
 }
 ''')
-put('config/includes.chroot/etc/systemd/system/codex-vnc.service','''[Unit]
-Description=Opt-in shared physical Xorg desktop
-ConditionPathExists=/etc/codex-remote/enabled
-ConditionPathExists=/home/chris/.vnc/passwd
-After=display-manager.service
-[Service]
-User=chris
-Environment=XAUTHORITY=/home/chris/.Xauthority
-ExecStart=/usr/bin/x0tigervncserver -fg -display :0 -localhost=1 -rfbport=5900 -PasswordFile=/home/chris/.vnc/passwd -SecurityTypes=VncAuth -AlwaysShared=1
-Restart=on-failure
-RestartSec=15
-NoNewPrivileges=true
-[Install]
-WantedBy=graphical.target
-''')
+# Per-owner screen-sharing services are added by polish-r5.py.
 put('config/includes.chroot/etc/systemd/system/codex-websockify.service','''[Unit]
 Description=Opt-in localhost browser-to-VNC bridge
 ConditionPathExists=/etc/codex-remote/enabled
-After=codex-vnc.service
+After=display-manager.service
 [Service]
 User=www-data
 ExecStart=/usr/bin/websockify 127.0.0.1:6081 127.0.0.1:5900

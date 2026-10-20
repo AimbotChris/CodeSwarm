@@ -9,6 +9,7 @@ builder/lima.yaml
 builder/mac.py
 builder/personalize.py
 builder/source-files.txt
+builder/recipe.py
 config/installer-only/code-swarm-admin.sh
 config/installer-only/code-swarm-apt.py
 config/installer-only/code-swarm-disks.sh
@@ -45,3 +46,10 @@ scripts/fetch-vendor.sh
 scripts/polish-r5.py
 scripts/polish-r6.py
 scripts/polish-r7.py
+config/toolchain.json
+product/code-swarm-workflow
+scripts/toolchain.py
+scripts/configure-workflows.py
+docs/WORKFLOWS.md
+LICENSE
+THIRD-PARTY.md

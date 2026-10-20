@@ -7,7 +7,10 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - name: Test dependencies
         run: sudo apt-get update && sudo apt-get install -y python3-tk python3-apt
       - name: Python tests (synthetic only)
@@ -16,3 +19,5 @@ jobs:
         run: node tests/test_fleet.js && node tests/test_fleet_ui.js
       - name: Source audit
         run: python3 builder/audit-source.py
+      - name: Reachable history audit
+        run: python3 builder/audit-source.py --mode history
